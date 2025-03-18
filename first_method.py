@@ -31,12 +31,36 @@ class Bootstrapping:
         self.instruments = sorted(instruments, key=lambda x: x.maturity)
         self.zero_rates = {}  # Dictionary to store zero-coupon rates
 
-    def interpolate_yield(self, maturity):
+    def interpolate_yield_inut(self, maturity):
         """ Calcule le taux interpolé avec le polynôme quadratique """        
         # Évaluation du polynôme aux maturities demandées
         maturities = list(self.zero_rates.keys())  # Abscisses
         rates = list(self.zero_rates.values())    # Ordonnées
         return np.interp(maturity, maturities, rates)
+    
+#########################################################################
+    def interpolate_yield(self, maturity):
+        """Interpole un taux zéro-coupon pour une maturité donnée"""
+        maturities = sorted(self.zero_rates.keys())  # Maturités triées
+        rates = [self.zero_rates[m] for m in maturities]  # Taux correspondants
+
+        if len(maturities) < 2:
+            raise ValueError("Impossible d'interpoler : il faut au moins 2 taux zéro-coupon.")
+
+        if len(maturities) == 2:
+            # Interpolation linéaire
+            return np.interp(maturity, maturities, rates)
+
+        else:
+            # Interpolation quadratique ou cubique (préférence pour CubicSpline)
+            if len(maturities) >= 3:
+                spline = interp1d(maturities, rates, kind='quadratic', fill_value="extrapolate")
+            else:
+                spline = CubicSpline(maturities, rates, bc_type='natural')
+                
+
+            return spline(maturity)
+    #######################################################################
 
     def solve_zero_rate(self, instrument):
         """Computes the zero-coupon rate using bootstrapping."""
@@ -90,7 +114,7 @@ class Bootstrapping:
 
     def build_curve(self):
         """Constructs the zero-coupon yield curve using bootstrapping."""
-        for inst in self.instruments:
+        for inst in sorted(self.instruments, key=lambda x: x.maturity):
             rate = self.solve_zero_rate(inst)
             self.zero_rates[inst.maturity] = rate
         return self.zero_rates
